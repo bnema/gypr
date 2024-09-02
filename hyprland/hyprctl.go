@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func ListWorkspacesAndMonitors() ([]Monitor, error) {
+func listWorkspacesAndMonitors() ([]Monitor, error) {
 	cmd := exec.Command("hyprctl", "workspaces")
 	output, err := cmd.Output()
 	if err != nil {
@@ -72,8 +72,8 @@ func ListWorkspacesAndMonitors() ([]Monitor, error) {
 	return result, nil
 }
 
-func GetCurrentWorkspaceInfo(monitorName string) (string, error) {
-	monitors, err := ListWorkspacesAndMonitors()
+func getCurrentWorkspaceInfo(monitorName string) (string, error) {
+	monitors, err := listWorkspacesAndMonitors()
 	if err != nil {
 		return "", err
 	}
@@ -93,4 +93,25 @@ func GetCurrentWorkspaceInfo(monitorName string) (string, error) {
 	}
 
 	return "", fmt.Errorf("monitor %s not found", monitorName)
+}
+
+func getCurrentActiveMonitor() (string, error) {
+	cmd := exec.Command("hyprctl", "activeworkspace")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to execute hyprctl: %w", err)
+	}
+
+	scanner := bufio.NewScanner(strings.NewReader(string(output)))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.Contains(line, "on monitor") {
+			parts := strings.Split(line, "on monitor")
+			if len(parts) > 1 {
+				return strings.TrimSpace(strings.TrimSuffix(parts[1], ":")), nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("active monitor not found in hyprctl output")
 }
