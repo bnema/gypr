@@ -1,61 +1,41 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/bnema/gypr/hyprland"
 )
 
 func main() {
-	log.Println("Starting Hyprland Notifier...")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	events, errors := hyprland.ListenForEvents()
+	// Set up signal handling for graceful shutdown
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-	ticker := time.NewTicker(1 * time.Hour)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case event := <-events:
-			handleEvent(event)
-		case err := <-errors:
-			log.Printf("Error: %v", err)
-			return
-		case <-ticker.C:
-			log.Println("Hyprland Notifier is still running...")
-		case sig := <-sigChan:
-			log.Printf("Received signal: %v. Shutting down...", sig)
-			return
+	// Start the event listener in a separate goroutine
+	go func() {
+		if err := hyprland.StartEventListener(ctx); err != nil {
+			log.Printf("Event listener stopped: %v", err)
 		}
-	}
-}
+	}()
 
-func handleEvent(event hyprland.Event) {
-	switch event.Type {
-	case "workspace":
-		workspaceInfo := hyprland.ParseWorkspaceInfo(event.Data)
-		position := hyprland.GlobalMonitorWorkspaces.GetWorkspacePosition("current", workspaceInfo.ID)
-		log.Printf("Switched to workspace: %s (%s)", workspaceInfo.ID, position)
-	case "createworkspace":
-		workspaceInfo := hyprland.ParseWorkspaceInfo(event.Data)
-		log.Printf("New workspace created: %s", workspaceInfo.ID)
-	case "destroyworkspace":
-		log.Printf("Workspace destroyed: %s", event.Data)
-	case "focusedmon":
-		monitorInfo := hyprland.ParseMonitorInfo(event.Data)
-		log.Printf("Focused monitor changed: %s, Workspace: %s", monitorInfo.Name, monitorInfo.Workspace)
-		position := hyprland.GlobalMonitorWorkspaces.GetWorkspacePosition(monitorInfo.Name, monitorInfo.Workspace)
-		log.Printf("Current workspace position: %s", position)
-	case "activewindow":
-		log.Printf("Active window changed: %s", event.Data)
-	default:
-		log.Printf("Unhandled event: %s - %s", event.Type, event.Data)
-	}
+	// Wait for termination signal
+	<-sigCh
+	log.Println("Received termination signal")
+
+	// Give some time for clean up
+	log.Println("Shutting down...")
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 0)
+	defer shutdownCancel()
+
+	// Wait for clean shutdown or timeout
+	<-shutdownCtx.Done()
+	fmt.Println("Shutdown complete")
 }
