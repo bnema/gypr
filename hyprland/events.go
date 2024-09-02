@@ -98,7 +98,8 @@ func (h *EventHandler) Workspace(w event.WorkspaceName) {
 
 	var currentWorkspace *Workspace
 	totalWorkspaces := len(targetMonitor.Workspaces)
-	currentWorkspaceIndex := 0
+	// Default to 1-based index
+	currentWorkspaceIndex := 1
 
 	for i, ws := range targetMonitor.Workspaces {
 		if ws.Name == string(w) {
